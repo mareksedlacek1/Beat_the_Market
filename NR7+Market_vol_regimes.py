@@ -235,29 +235,32 @@ for d in range(1, len(all_days)):
         # signals[(current_close_prices < LB)] -= 1
         # signals[current_close_prices > vwap] = 1
         # signals[current_close_prices < vwap] = -1
-
+        target_vol = 0.02
+        max_leverage = 4
         # Rappel : 'is_nr4_signal_today' est True/False pour toute la journée, indiquant si
         # *hier* était un jour NR4 et qu'un potentiel breakout est actif *aujourd'hui*.
         if is_nr7_signal_today:
+            target_vol = 0.04
+            max_leverage = 6
             # Condition d'achat sur breakout haussier (clôture au-dessus du High du jour NR4 précédent)
             # On ajoute la condition optionnelle pour s'assurer que l'ouverture du 30-min n'a pas déjà gapé au-dessus
             # Si le prix ouvre déjà au-dessus du breakout, l'entrée est souvent moins bonne.
-            nr7_buy_breakout_condition = (current_close_prices > nr7_prev_high) & \
-                                         (current_day_data['open'] < nr7_prev_high)
+            # nr7_buy_breakout_condition = (current_close_prices > nr7_prev_high) & \
+                                         #(current_day_data['open'] < nr7_prev_high)
 
             # Condition de vente à découvert sur breakout baissier (clôture en-dessous du Low du jour NR4 précédent)
             # Idem pour l'ouverture.
-            nr7_sell_breakout_condition = (current_close_prices < nr7_prev_low) & \
-                                          (current_day_data['open'] > nr7_prev_low)
+            #nr7_sell_breakout_condition = (current_close_prices < nr7_prev_low) & \
+                                          #(current_day_data['open'] > nr7_prev_low)
 
             # --- Comment combiner les signaux NR4 avec les signaux existants (UB/LB/VWAP) ? ---
 
             # Si une condition de breakout NR4 est remplie, définis le signal correspondant.
             # Cette approche signifie que si un signal NR4 est présent, il a la priorité
             # ou agit comme une nouvelle opportunité qui écrase potentiellement un signal UB/LB/VWAP.
-            signals[nr7_buy_breakout_condition] = 1
-            signals[nr7_sell_breakout_condition] = -1
-            target_vol=0.04
+            #signals[nr7_buy_breakout_condition] = 1
+            #signals[nr7_sell_breakout_condition] = -1
+
 
             # Autres options de combinaison (à envisager et tester) :
             # A. NR4 comme CONFIRMATION (plus strict, moins de trades):

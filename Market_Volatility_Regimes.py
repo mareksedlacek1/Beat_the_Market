@@ -244,14 +244,14 @@ for d in range(1,len(all_days)):
         exposure = pd.Series(filled_values, index=current_day_data.index).shift(1).fillna(
             0).values  # Apply shift and fill NaNs
         # --- LA FERMETURE EN FIN DE JOURNÉE ---
-
+        '''
         if exposure.size > 0:  # S'assurer qu'il y a des données d'exposition pour la journée
             last_minute_index_in_exposure = -1  # Le dernier élément de l'array NumPy
 
             # Si la position à la dernière minute n'est pas déjà zéro
             if exposure[last_minute_index_in_exposure] != 0:
                 exposure[last_minute_index_in_exposure] = 0  # Force la position à zéro
-
+        '''
         #print(current_day)
         #print(dict_exposure)
         dict_exposure[current_day] = exposure
