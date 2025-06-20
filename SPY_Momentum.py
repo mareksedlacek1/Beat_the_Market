@@ -1,50 +1,14 @@
+import requests
+import time
 import pandas as pd
+from   datetime import datetime
 import numpy as np
+import pytz
 import math
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+from   matplotlib.ticker import FuncFormatter
 import statsmodels.api as sm
-import seaborn as sns
-
-######################################################VIX##########################################################################
-import yfinance as yf
-
-
-def get_vix_data(start_date, end_date):
-    """
-    Récupère les données historiques du VIX.
-
-    Args:
-        start_date (str): Date de début (format 'AAAA-MM-JJ').
-        end_date (str): Date de fin (format 'AAAA-MM-JJ').
-
-    Returns:
-        pd.DataFrame: DataFrame avec les données quotidiennes du VIX,
-                      incluant 'Open', 'High', 'Low', 'Close', 'Volume'.
-    """
-    vix_ticker = "^VIX" # Symbole du VIX sur Yahoo Finance
-    try:
-        vix_data = yf.download(vix_ticker, start=start_date, end=end_date)
-        return vix_data
-    except Exception as e:
-        print(f"Erreur lors du téléchargement des données du VIX : {e}")
-        return None
-
-# Exemple d'utilisation :
-start_date_vix = "2020-01-01" # Ajuste à la date de début de tes données SPY
-end_date_vix = "2024-12-31"   # Ajuste à la date de fin de tes données SPY
-
-vix_df = get_vix_data(start_date_vix, end_date_vix)
-
-if vix_df is not None:
-    print("Premières lignes des données VIX :")
-    print(vix_df.head())
-    print("\nDernières lignes des données VIX :")
-    print(vix_df.tail())
-    print("\nInformations sur les données VIX :")
-    vix_df.info()
-
-##########################################SPY_DATA###########################################################################
 
 file_path_intra = 'SPY_intra_data_2022-05-09_to_2024-04-22.csv'
 file_path_daily = 'SPY_daily_data_2022-05-09_to_2024-04-22.csv'
@@ -94,7 +58,7 @@ for d in range(1, len(all_days)):
     # Calculate the absolute percentage change from the day's opening price.
     open_price = current_day_data['open'].iloc[0]
     df.loc[current_day_data.index, 'move_open'] = (current_day_data['close'] / open_price - 1).abs()
-    df.index = pd.to_datetime(df.index)
+
     # Compute the daily return for SPY using the closing prices from the current and previous day.
     spy_ret.loc[current_day] = current_day_data['close'].iloc[-1] / prev_day_data['close'].iloc[-1] - 1
 
@@ -132,9 +96,9 @@ df['dividend'] = df['dividend'].fillna(0)  # Fill missing dividend data with 0.
 
 
 # Group data by day for faster access
-AUM_0 =100000.0   # Initial amount of money to manage
+AUM_0 = 100000.0   # Initial amount of money to manage
 commission = 0.0035  # Commission rate per trade
-min_comm_per_order = 0.035  # Minimum commission per trade
+min_comm_per_order = 0.35  # Minimum commission per trade
 band_mult = 1  # Multiplier for the trading band
 trade_freq = 30  # Frequency of trades in minutes
 sizing_type = "vol_target"  # Strategy for sizing positions based on volatility "vol_target"/ "full_notional"
@@ -150,7 +114,6 @@ strat['ret'] = np.nan
 strat['AUM'] = AUM_0
 strat['ret_spy'] = np.nan
 
-
 df_daily = pd.read_csv(file_path_daily)
 df_daily['caldt'] = pd.to_datetime(df_daily['caldt'],errors='coerce')
 #df_daily.info()
@@ -158,9 +121,9 @@ df_daily.set_index('caldt', inplace=True)
 df_daily['ret'] = df_daily['close'].diff() / df_daily['close'].shift()
 
 
+
 liste_UB,liste_LB=[],[]
 dict_exposure = {}
-daily_results = []
 
 # Iterate through each day to calculate metrics.
 for d in range(1,len(all_days)):
@@ -175,11 +138,6 @@ for d in range(1,len(all_days)):
         if 'sigma_open' in current_day_data.columns and current_day_data['sigma_open'].isna().all():
             #print(f"DEBUG: Skipping {current_day} because sigma_open is all NaN.")
             continue # Passe au jour suivant si sigma_open est tout NaN
-        vix_open_value = np.nan
-
-        date_as_timestamp = pd.Timestamp(current_day)
-        vix_open_value=vix_df.loc[date_as_timestamp,'Open'].item()
-
 
         prev_close_adjusted = prev_day_data['close'].iloc[-1] - df.loc[current_day_data.index, 'dividend'].iloc[-1]
         open_price = current_day_data['open'].iloc[0]
@@ -198,12 +156,6 @@ for d in range(1,len(all_days)):
         liste_UB.append(UB)
         liste_LB.append(LB)
 
-        if vix_open_value > 20 :
-            strat.loc[current_day, 'AUM'] = strat.loc[prev_day, 'AUM']
-            strat.loc[current_day, 'ret'] = 0
-            strat.loc[current_day, 'ret_spy'] = df_daily.loc[df_daily.index.date == current_day, 'ret'].values[0]
-            continue
-
         # Determine trading signals
         signals = np.zeros_like(current_close_prices)
         signals[(current_close_prices > UB) & (current_close_prices > vwap)] = 1
@@ -212,6 +164,7 @@ for d in range(1,len(all_days)):
         #signals[(current_close_prices < LB)] -= 1
         #signals[current_close_prices > vwap] = 1
         #signals[current_close_prices < vwap] = -1
+
 
 
         # Position sizing
@@ -245,12 +198,11 @@ for d in range(1,len(all_days)):
             0).values  # Apply shift and fill NaNs
         # --- LA FERMETURE EN FIN DE JOURNÉE ---
 
-        if exposure.size > 0:  # S'assurer qu'il y a des données d'exposition pour la journée
-            last_minute_index_in_exposure = -1  # Le dernier élément de l'array NumPy
-
+        #if exposure.size > 0:  # S'assurer qu'il y a des données d'exposition pour la journée
+          #  last_minute_index_in_exposure = -1  # Le dernier élément de l'array NumPy
             # Si la position à la dernière minute n'est pas déjà zéro
-            if exposure[last_minute_index_in_exposure] != 0:
-                exposure[last_minute_index_in_exposure] = 0  # Force la position à zéro
+         #   if exposure[last_minute_index_in_exposure] != 0:
+           #     exposure[last_minute_index_in_exposure] = 0  # Force la position à zéro
 
         #print(current_day)
         #print(dict_exposure)
@@ -265,16 +217,10 @@ for d in range(1,len(all_days)):
         commission_paid = trades_count * max(min_comm_per_order, commission * shares)
         net_pnl = gross_pnl - commission_paid
 
-        daily_results.append({
-            'Date': current_day,
-            'VIX_Open': vix_open_value,
-            'Daily_Return': net_pnl  # Remplace par ton vrai rendement quotidien en % ou PnL
-        })
 
         # Update the daily return and new AUM
         strat.loc[current_day, 'AUM'] = previous_aum + net_pnl
         strat.loc[current_day, 'ret'] = net_pnl / previous_aum
-
         # Save the passive Buy&Hold daily return for SPY
         strat.loc[current_day, 'ret_spy'] = df_daily.loc[df_daily.index.date == current_day, 'ret'].values[0]
 #print(strat[ 'AUM'] )
@@ -282,96 +228,13 @@ for d in range(1,len(all_days)):
 #print(strat['ret_spy'])
 #print(dict_exposure)
 
-results_df = pd.DataFrame(daily_results)
-results_df.set_index('Date', inplace=True)
-
-# Nettoie les lignes où le VIX était NaN si tu as eu des jours skippés sans valeur VIX
-results_df.dropna(subset=['VIX_Open'], inplace=True)
-
-
-# Définir les buckets de VIX
-vix_bins = [0, 10, 15, 20, 30, 40, 100] # Tu peux ajuster ces seuils
-vix_labels = ['<10', '10-15', '15-20', '20-30', '30-40', '>40'] # Labels correspondants
-
-results_df['VIX_Bucket'] = pd.cut(results_df['VIX_Open'], bins=vix_bins, labels=vix_labels, right=False)
-
-# --- NOUVEAU : Fonction pour calculer le rendement composé ---
-def calculate_compounded_return(returns_series):
-    # S'assure que la série n'est pas vide et ne contient pas de NaN
-    clean_series = returns_series.dropna()
-    if clean_series.empty:
-        return np.nan # Ou 0, selon ce que tu préfères pour un bucket vide
-    return (1 + clean_series).prod() - 1
-
-# Calculer les métriques par bucket
-vix_performance = results_df.groupby('VIX_Bucket').agg(
-    Total_Days=('Daily_Return', 'size'),
-    Mean_Daily_Return=('Daily_Return', 'mean'), # Rendement moyen quotidien
-    Std_Daily_Return=('Daily_Return', 'std') # Écart-type des rendements quotidiens
-)
-
-# --- NOUVEAU : Calcul du Total_Compounded_Return en utilisant la fonction ---
-# Cette ligne est ajoutée après la première agrégation
-vix_performance['Total_Compounded_Return'] = results_df.groupby('VIX_Bucket')['Daily_Return'].apply(calculate_compounded_return)
-
-# --- NOUVEAU : Calcul du Sharpe Ratio ANNUALISÉ ---
-# Nombre de jours de trading par an (standard pour les marchés actions)
-trading_days_per_year = 252
-
-vix_performance['Sharpe_Ratio_Annualized'] = vix_performance.apply(
-    lambda row: (row['Mean_Daily_Return'] / row['Std_Daily_Return']) * np.sqrt(trading_days_per_year)
-                 if row['Std_Daily_Return'] != 0 else np.nan,
-    axis=1
-)
-
-# Affiche le tableau des performances par bucket
-fichier_vix_performance = "fichier_vix_performance.txt"
-df.to_string()
-with open(fichier_vix_performance, 'w') as f:
-    dataframe_as_string = vix_performance.to_string(
-        max_rows=None,  # Affiche toutes les lignes
-        max_cols=None  # Affiche toutes les colonnes
-    )
-    f.write(dataframe_as_string)
-print("\n--- Performance par Bucket VIX ---")
-print(vix_performance)
-''' 
-if not vix_performance['Sharpe_Ratio_Annualized'].isna().all():
-    plt.figure(figsize=(10, 6))
-    vix_performance['Sharpe_Ratio'].plot(kind='bar')
-    plt.title('Sharpe Ratio par Régime de Volatilité VIX')
-    plt.xlabel('VIX Bucket')
-    plt.ylabel('Sharpe Ratio')
-    plt.xticks(rotation=45)
-    plt.grid(axis='y')
-    plt.tight_layout()
-    plt.show()
-
-'''
-plt.figure(figsize=(10, 6)) # Ajuste la taille pour une meilleure lisibilité
-sns.barplot(x=vix_performance.index, y='Sharpe_Ratio_Annualized', data=vix_performance, palette='viridis')
-
-plt.xlabel('VIX Range')
-plt.ylabel('Annualized Sharpe Ratio')
-plt.title('Strategy Performance (Sharpe Ratio) by VIX Regime')
-plt.grid(axis='y', linestyle='--', alpha=0.7) # Ajoute une grille horizontale
-plt.axhline(y=1.0, color='r', linestyle='--', label='Good Sharpe (>= 1.0)') # Ligne de référence pour un bon Sharpe
-plt.axhline(y=0.0, color='grey', linestyle='-', label='Breakeven Sharpe (0.0)') # Ligne de référence pour 0 Sharpe
-plt.legend()
-plt.tight_layout() # Ajuste la mise en page pour éviter que les étiquettes ne se chevauchent
-plt.show()
-
-
-#########################################GRAPHIQUE################################################################################################
 
 from matplotlib.ticker import FuncFormatter # Nécessaire pour le formatage de l'axe Y de l'AUM global
 
 # --- DÉFINIR LA JOURNÉE À TRACER ---
-dates_to_plot_str = ['2023-09-05','2023-12-18',
-'2023-12-19',
-'2023-12-20'
-,'2023-12-22'
-,'2023-12-29'
+dates_to_plot_str = ['2023-09-05','2023-09-06','2023-09-07','2023-09-08','2023-09-09','2023-09-10','2023-09-11','2023-09-12'
+
+
 ] # Modifie cette date
 ''' 
 ,'2023-12-18',
@@ -380,7 +243,7 @@ dates_to_plot_str = ['2023-09-05','2023-12-18',
 ,'2023-12-22'
 ,'2023-12-29'
 '''
-'''
+
 for day in dates_to_plot_str:
     day_to_plot = pd.to_datetime(day).date()
     try:
@@ -451,11 +314,11 @@ for day in dates_to_plot_str:
         if not sell_signals_idx.empty:
             sell_prices = current_day_data_for_plot.loc[sell_signals_idx, 'close']
             ax1.plot(sell_signals_idx, sell_prices, 'v', markersize=10, color='red', label='Ordre Vente')
-        
-        #if not exit_signals_idx.empty:
-        #    exit_prices = current_day_data_for_plot.loc[exit_signals_idx, 'close']
-        #   ax1.plot(exit_signals_idx, exit_prices, 'o', markersize=8, color='gold', fillstyle='none', label='Sortie Position')
-        
+        ''' 
+        if not exit_signals_idx.empty:
+            exit_prices = current_day_data_for_plot.loc[exit_signals_idx, 'close']
+            ax1.plot(exit_signals_idx, exit_prices, 'o', markersize=8, color='gold', fillstyle='none', label='Sortie Position')
+        '''
         ax1.set_xlabel('Heure de la Journée')
         ax1.set_ylabel('Prix') # Pas de couleur spécifique si un seul axe Y
         ax1.tick_params(axis='y') # Pas de couleur spécifique si un seul axe Y
@@ -482,7 +345,7 @@ for day in dates_to_plot_str:
     except Exception as e:
         print(f"Une erreur est survenue lors du tracé pour le jour {day_to_plot} : {e}")
         print("Vérifiez que le jour choisi est présent dans vos données et que les bandes et l'exposition ont été calculées pour ce jour.")
-'''
+
 # --- Garde cette partie en dehors du bloc try/except de tracé intraday ---
 # Elle concerne le graphique global de l'AUM de la stratégie
 # Calculate cumulative products for AUM calculations
@@ -496,7 +359,6 @@ ax.plot(strat.index, strat['AUM'], label='Momentum', linewidth=2, color='k')
 ax.plot(strat.index, strat['AUM_SPX'], label='S&P 500', linewidth=1, color='r')
 
 # Formatting the plot
-''' 
 ax.grid(True, linestyle=':')
 ax.xaxis.set_major_locator(mdates.MonthLocator())
 ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %y'))
@@ -509,7 +371,7 @@ plt.suptitle(f'Commission = ${commission}/share', fontsize=9, verticalalignment=
 
 # Show the plot
 plt.show()
-'''
+
 # Calculate additional stats and display them
 
 first_close_price = df['close'].iloc[0]
@@ -518,30 +380,81 @@ buy_and_hold_return = (last_close_price - first_close_price) / first_close_price
 Y = strat['ret'].dropna()
 X = sm.add_constant(strat['ret_spy'].dropna())
 model = sm.OLS(Y, X).fit()
-#strat["ret"]=strat["ret"]*100
-with open(fichier_vix_performance, 'w') as f:
-    PnL = strat["ret"].to_string(
-        max_rows=None,  # Affiche toutes les lignes
-        #max_cols=None  # Affiche toutes les colonnes
-    )
-    f.write(PnL)
-#print(strat['ret'].dropna()*100,5)
 stats = {
+
     'Buy and Hold Return (%)':  round(buy_and_hold_return * 100, 2),
     'Total Return (%)': round((np.prod(1 + strat['ret'].dropna()) - 1) * 100, 2),
     'Annualized Return (%)': round((np.prod(1 + strat['ret']) ** (252 / len(strat['ret'])) - 1) * 100, 1),
     'Annualized Volatility (%)': round(strat['ret'].dropna().std() * np.sqrt(252) * 100, 1),
     'Sharpe Ratio': round(strat['ret'].dropna().mean() / strat['ret'].dropna().std() * np.sqrt(252), 2),
     'Hit Ratio (%)': round((strat['ret'] > 0).sum() / (strat['ret'].abs() > 0).sum() * 100, 0),
-    'Maximum Drawdown (%)': round(strat['AUM'].div(strat['AUM'].cummax()).sub(1).min() * -100, 2),
+    'Maximum Drawdown (%)': round(strat['AUM'].div(strat['AUM'].cummax()).sub(1).min() * -100, 0),
     'Alpha (%)':round(model.params.const * 100 * 252, 2),
     'Beta': round(model.params['ret_spy'], 3),
-    "Average PnL":round(strat['ret'].dropna().mean()*100,5)
 }
 
 
+fichier_performance = "strategy_metrics.txt"
+
+with open(fichier_performance, 'a') as f:
+    string_stats = str(stats)
+    f.write("---New SPY Momentum Strategies---\n")
+    f.write(string_stats)
+    f.write("\n")
 
 
 
 
 print(stats)
+
+
+
+'''            
+# --- DÉBUT DU TRACÉ DES GRAPHIQUES ---
+
+# Créer une figure avec deux sous-graphes, l'un au-dessus de l'autre
+# sharex=True pour que les axes des abscisses soient alignés et zooment ensemble
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10), sharex=True)
+
+# --- Graphique du Haut : AUM (Asset Under Management) ---
+ax1.plot(strat.index, strat['AUM'], label='AUM Stratégie', color='darkblue', linewidth=2)
+ax1.plot(strat.index, strat['AUM_SPX'], label='AUM S&P 500 (Benchmark)', color='darkred', linewidth=1.5, linestyle='--') # Optionnel: pour comparer AUM vs Benchmark
+
+ax1.set_title('Performance de la Stratégie (AUM vs Benchmark)')
+ax1.set_ylabel('Valeur du Capital ($)')
+ax1.grid(True, linestyle=':', alpha=0.7)
+ax1.legend(loc='upper left')
+
+# Formatte l'axe Y de l'AUM en format monétaire
+formatter_money = FuncFormatter(lambda x, p: f'${x:,.0f}')
+ax1.yaxis.set_major_formatter(formatter_money)
+
+
+# --- Graphique du Bas : Rendements Quotidiens ---
+ax2.plot(strat.index, strat['ret'] * 100, label='Rendement Quotidien Stratégie (%)', color='green', linewidth=0.8)
+ax2.plot(strat.index, strat['ret_spy'] * 100, label='Rendement Quotidien SPY (%)', color='orange', linewidth=0.8, linestyle=':')
+
+ax2.set_xlabel('Date')
+ax2.set_ylabel('Rendement (%)')
+ax2.grid(True, linestyle=':', alpha=0.7)
+ax2.legend(loc='upper left')
+
+# Formatte l'axe Y des rendements en pourcentage
+formatter_percent = FuncFormatter(lambda y, p: f'{y:.2f}%')
+ax2.yaxis.set_major_formatter(formatter_percent)
+
+# --- Configuration de l'axe X (partagé) ---
+# Utilise un localisateur et un formateur pour les dates, par exemple par mois ou année
+locator = mdates.MonthLocator(interval=3) # Tous les 3 mois
+formatter = mdates.DateFormatter('%b %Y') # Mois Année (ex: Jan 2020)
+
+ax2.xaxis.set_major_locator(locator)
+ax2.xaxis.set_major_formatter(formatter)
+plt.xticks(rotation=45) # Rotation pour éviter que les dates ne se chevauchent
+
+# Ajuste l'espacement entre les sous-graphes
+plt.tight_layout()
+
+# Affiche le graphique
+plt.show()
+'''
