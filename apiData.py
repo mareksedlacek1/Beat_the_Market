@@ -6,7 +6,7 @@ import pytz
 
 
 
-API_KEY = 'fpIf3IkDpK5khoJWEboNinnlMp_zMMRt'
+API_KEY = ''
 BASE_URL = 'https://api.polygon.io'
 
 # Define the rate limit enforcement based on the API tier, Free or Paid.
